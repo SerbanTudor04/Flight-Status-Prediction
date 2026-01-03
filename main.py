@@ -39,25 +39,19 @@ class FlightStatusPrediction:
         """
         Converts non-numeric data to numeric so PCA can handle it.
         """
-        # FIX: Changed self.raw_features to self.features
         df = self.dataframe[self.features].copy()
 
-        # 2. Handle Dates
         df['FlightDate'] = pd.to_datetime(df['FlightDate'])
         df['Month'] = df['FlightDate'].dt.month
         df['DayOfWeek'] = df['FlightDate'].dt.dayofweek
         df = df.drop(columns=['FlightDate'])
 
-        # 3. Handle Categorical: Airline
         df = pd.get_dummies(df, columns=['Airline'], drop_first=True)
 
-        # 4. Handle Categorical: Origin/Dest (Drop for now)
         df = df.drop(columns=['Origin', 'Dest'])
 
-        # 5. Handle Missing Values
         df = df.dropna()
 
-        # Ensure all data is numeric
         for col in df.columns:
             df[col] = pd.to_numeric(df[col])
 
