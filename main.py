@@ -1,12 +1,18 @@
 from dataclasses import dataclass, field
 from typing import List
 
-import numpy as np
+# import numpy as np
 import pandas as pd
+from factor_analyzer import FactorAnalyzer, calculate_bartlett_sphericity, calculate_kmo
 from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# Disable warnings
+import warnings
+warnings.filterwarnings("ignore")
 
 
 @dataclass
@@ -16,7 +22,8 @@ class FlightStatusLoadData:
     features: List[str] = field(default_factory=lambda: [
         'FlightDate', 'Airline', 'Origin', 'Dest',
         'Cancelled', 'Diverted',
-        'CRSDepTime', 'DepTime', 'DepDelayMinutes'
+        'CRSDepTime', 'DepTime', 'DepDelayMinutes',
+        'ArrDelayMinutes'
     ])
 
 
@@ -35,10 +42,18 @@ class FlightStatusPrediction:
         self.pca_model = None
         self.feature_names = None
 
+        # LDA Attributes
+        self.X_lda = None
+        self.y_lda = None
+        self.lda_model = None
+        self.lda_result = None
+
+        # EFA Attributes
+        self.df_efa = None
+        self.fa_model = None
+        self.loadings = None
+
     def preprocess_data(self):
-        """
-        Converts non-numeric data to numeric so PCA can handle it.
-        """
         df = self.dataframe[self.features].copy()
 
         df['FlightDate'] = pd.to_datetime(df['FlightDate'])
@@ -81,30 +96,22 @@ class FlightStatusPrediction:
         return self
 
     def visualize_pca_results(self):
-        """
-        Generates 3 key plots to understand the PCA analysis.
-        """
         if self.pca_model is None:
             print("Please run build_pca() first.")
-            return
+            return None
 
         plt.figure(figsize=(18, 6))
 
-        # --- PLOT 1: Scatter Plot of PC1 vs PC2 ---
         plt.subplot(1, 3, 1)
         sns.scatterplot(x='PC1', y='PC2', data=self.dataframe_pca, alpha=0.3, s=10)
         plt.title('PCA Scatter Plot (Flight Clusters)')
         plt.xlabel(f'PC1 ({self.pca_model.explained_variance_ratio_[0] * 100:.1f}% Variance)')
         plt.ylabel(f'PC2 ({self.pca_model.explained_variance_ratio_[1] * 100:.1f}% Variance)')
 
-        # --- PLOT 2: Feature Loadings (What makes up PC1?) ---
-        # This shows which original variables influence the First Component the most
         plt.subplot(1, 3, 2)
 
-        # Get the contributions of each feature to PC1
         pc1_loadings = self.pca_model.components_[0]
 
-        # Create a temporary DF to plot
         loadings_df = pd.DataFrame({'Feature': self.feature_names, 'Loading': pc1_loadings})
         loadings_df = loadings_df.sort_values(by='Loading', key=abs, ascending=False).head(10)
 
@@ -112,7 +119,6 @@ class FlightStatusPrediction:
         plt.title('Top Features driving PC1 (Loadings)')
         plt.grid(True, axis='x', linestyle='--', alpha=0.6)
 
-        # --- PLOT 3: Explained Variance ---
         plt.subplot(1, 3, 3)
         y_pos = [0, 1]  # positions for PC1, PC2
         plt.bar(y_pos, self.pca_model.explained_variance_ratio_, alpha=0.7)
@@ -125,10 +131,211 @@ class FlightStatusPrediction:
 
         return self
 
+    def preprocess_for_lda(self):
+        print("\nPreprocessing for LDA...")
 
-if __name__ == "__main__":
-    data_path = "data/Combined_Flights_2019.csv"
-    data_load_obj = FlightStatusLoadData(data_path=data_path)
+        df = self.dataframe[self.features].copy()
+
+        def categorize_delay(minutes):
+            if minutes < 15:
+                return 'On Time'
+            elif minutes < 60:
+                return 'Small Delay'
+            else:
+                return 'Major Delay'
+
+        df = df.dropna(subset=['ArrDelayMinutes'])
+
+        y_labels = df['ArrDelayMinutes'].apply(categorize_delay)
+
+        df = df.drop(columns=['ArrDelayMinutes', 'Cancelled', 'Diverted', 'Origin', 'Dest'])
+
+        df['FlightDate'] = pd.to_datetime(df['FlightDate'])
+        df['Month'] = df['FlightDate'].dt.month
+        df['DayOfWeek'] = df['FlightDate'].dt.dayofweek
+        df = df.drop(columns=['FlightDate'])
+
+        df = pd.get_dummies(df, columns=['Airline'], drop_first=True)
+
+        df = df.dropna()
+
+        y_labels = y_labels.loc[df.index]
+
+        self.X_lda = df
+        self.y_lda = y_labels
+
+        print(f"LDA Features (X) shape: {self.X_lda.shape}")
+        print(f"LDA Target (y) classes: {self.y_lda.unique()}")
+
+    def build_lda(self):
+        if self.X_lda is None:
+            self.preprocess_for_lda()
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(self.X_lda)
+
+        self.lda_model = LinearDiscriminantAnalysis(n_components=2)
+        X_lda_transformed = self.lda_model.fit_transform(X_scaled, self.y_lda)
+
+        self.lda_result = pd.DataFrame(data=X_lda_transformed, columns=['LD1', 'LD2'])
+        self.lda_result['Class'] = self.y_lda.values
+
+        print("\n---  LDA Result ---")
+        print(f"Explained Variance Ratio: {self.lda_model.explained_variance_ratio_}")
+        return self
+
+    def visualize_lda_results(self):
+        if self.lda_result is None:
+            print("Please run build_lda() first.")
+            return
+
+        plt.figure(figsize=(10, 8))
+
+        custom_palette = {'On Time': 'green', 'Small Delay': 'orange', 'Major Delay': 'red'}
+
+        sns.scatterplot(
+            x='LD1', y='LD2',
+            hue='Class',
+            data=self.lda_result,
+            palette=custom_palette,
+            alpha=0.6,
+            s=15
+        )
+
+        plt.title('LDA: Separation of Flight Delay Groups')
+        plt.xlabel(f'LD1 ({self.lda_model.explained_variance_ratio_[0] * 100:.1f}%)')
+        plt.ylabel(f'LD2 ({self.lda_model.explained_variance_ratio_[1] * 100:.1f}%)')
+        plt.grid(True, linestyle='--', alpha=0.5)
+        plt.legend(title='Delay Status')
+        plt.show()
+        return self
+
+    def preprocess_for_efa(self):
+        print("\n--- Preprocessing for EFA ---")
+        df = self.dataframe[self.features].copy()
+
+        cols_to_drop = ['FlightDate', 'Airline', 'Origin', 'Dest']
+        df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
+
+        df = df.dropna()
+
+        non_constant_cols = [col for col in df.columns if df[col].nunique() > 1]
+        dropped_cols = set(df.columns) - set(non_constant_cols)
+        if dropped_cols:
+            print(f"Dropping constant columns (Zero Variance): {dropped_cols}")
+            df = df[non_constant_cols]
+
+        print(f"Columns used for EFA: {df.columns.tolist()}")
+
+        scaler = StandardScaler()
+        df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+
+        self.df_efa = df_scaled
+        print(f"Data ready for Factor Analysis. Shape: {self.df_efa.shape}")
+
+    def check_factorability(self):
+        if self.df_efa is None:
+            self.preprocess_for_efa()
+
+        print("\n--- 1. Adequacy Tests ---")
+
+        # Test A: Bartlett's Test (Is there any correlation at all?)
+        # We want p_value < 0.05
+        chi_square_value, p_value = calculate_bartlett_sphericity(self.df_efa)
+        print(f"Bartlett’s Test p-value: {p_value} (Should be < 0.05)")
+
+        # Test B: KMO Test (Is the sample good?)
+        # Value 0-1. We want > 0.6
+        kmo_all, kmo_model = calculate_kmo(self.df_efa)
+        print(f"KMO Test Value: {kmo_model:.3f} (Should be > 0.6)")
+
+        return self
+
+    def build_efa(self, n_factors=3):
+        if self.df_efa is None:
+            self.preprocess_for_efa()
+
+        print(f"\n--- 2. Building Factor Model ({n_factors} Factors) ---")
+
+        # Rotation='varimax' makes the factors "orthogonal" (independent)
+        # easier to interpret.
+        self.fa_model = FactorAnalyzer(n_factors=n_factors, rotation='varimax')
+        self.fa_model.fit(self.df_efa)
+
+        # Get the Loadings (The correlation between Variables and Factors)
+        self.loadings = pd.DataFrame(
+            self.fa_model.loadings_,
+            index=self.df_efa.columns,
+            columns=[f'Factor {i + 1}' for i in range(n_factors)]
+        )
+
+        # Get Variance Explained
+        variance = self.fa_model.get_factor_variance()
+        var_df = pd.DataFrame(variance, index=['SS Loadings', 'Proportion Var', 'Cumulative Var'],
+                              columns=[f'Factor {i + 1}' for i in range(n_factors)])
+
+        print("\nFactor Variance:")
+        print(var_df)
+        return self
+
+    def visualize_efa(self):
+        """
+        Heatmap to see which variables belong to which hidden Factor.
+        """
+        if self.loadings is None:
+            print("Run build_efa() first.")
+            return
+
+        plt.figure(figsize=(8, 6))
+
+        # Heatmap of Factor Loadings
+        sns.heatmap(self.loadings, annot=True, cmap="coolwarm", center=0)
+
+        plt.title('Factor Loadings (Correlations between Variables and Latent Factors)')
+        plt.ylabel('Observed Variables')
+        plt.xlabel('Latent Factors')
+        plt.tight_layout()
+        plt.show()
+
+        # Scree Plot (To help decide how many factors to use)
+        plt.figure(figsize=(8, 4))
+        ev, v = self.fa_model.get_eigenvalues()
+        plt.scatter(range(1, self.df_efa.shape[1] + 1), ev)
+        plt.plot(range(1, self.df_efa.shape[1] + 1), ev)
+        plt.title('Scree Plot')
+        plt.xlabel('Factors')
+        plt.ylabel('Eigenvalue (Information)')
+        plt.grid()
+        plt.axhline(y=1, color='r', linestyle='--')  # Kaiser criterion
+        plt.show()
+
+def do_pca():
+    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
     obj = FlightStatusPrediction(data_load_obj)
     obj.build_pca()\
         .visualize_pca_results()
+
+def do_lda():
+    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
+    obj = FlightStatusPrediction(data_load_obj)
+    obj.build_lda()\
+        .visualize_lda_results()
+
+
+def do_efa():
+    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
+    data_load_obj.features=[
+        'FlightDate', 'Airline', 'Origin', 'Dest',
+        'Cancelled', 'Diverted',
+        'CRSDepTime', 'DepTime', 'DepDelayMinutes',
+        'ArrDelayMinutes',
+        'Distance', 'AirTime'
+    ]
+    obj = FlightStatusPrediction(data_load_obj)
+    obj.build_efa()\
+        .visualize_efa()
+
+if __name__ == "__main__":
+    # do_lda()
+    # do_pca()
+    do_efa()
