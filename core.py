@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List
 
-# import numpy as np
 import pandas as pd
 from factor_analyzer import FactorAnalyzer, calculate_bartlett_sphericity, calculate_kmo
 from sklearn.decomposition import PCA
@@ -10,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Disable warnings
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -35,20 +33,16 @@ class FlightStatusPrediction:
         self.dataframe = pd.read_csv(self.load_data.data_path, nrows=self.load_data.preload_rows)
         print("Dataframe loaded")
 
-
-        # PCA Atributes
         self.dataframe_pca = None
         self.scaler = None
         self.pca_model = None
         self.feature_names = None
 
-        # LDA Attributes
         self.X_lda = None
         self.y_lda = None
         self.lda_model = None
         self.lda_result = None
 
-        # EFA Attributes
         self.df_efa = None
         self.fa_model = None
         self.loadings = None
@@ -120,7 +114,7 @@ class FlightStatusPrediction:
         plt.grid(True, axis='x', linestyle='--', alpha=0.6)
 
         plt.subplot(1, 3, 3)
-        y_pos = [0, 1]  # positions for PC1, PC2
+        y_pos = [0, 1]
         plt.bar(y_pos, self.pca_model.explained_variance_ratio_, alpha=0.7)
         plt.xticks(y_pos, ['PC1', 'PC2'])
         plt.title('Explained Variance Ratio')
@@ -239,13 +233,9 @@ class FlightStatusPrediction:
 
         print("\n--- 1. Adequacy Tests ---")
 
-        # Test A: Bartlett's Test (Is there any correlation at all?)
-        # We want p_value < 0.05
         chi_square_value, p_value = calculate_bartlett_sphericity(self.df_efa)
         print(f"Bartlett’s Test p-value: {p_value} (Should be < 0.05)")
 
-        # Test B: KMO Test (Is the sample good?)
-        # Value 0-1. We want > 0.6
         kmo_all, kmo_model = calculate_kmo(self.df_efa)
         print(f"KMO Test Value: {kmo_model:.3f} (Should be > 0.6)")
 
@@ -257,19 +247,15 @@ class FlightStatusPrediction:
 
         print(f"\n--- 2. Building Factor Model ({n_factors} Factors) ---")
 
-        # Rotation='varimax' makes the factors "orthogonal" (independent)
-        # easier to interpret.
         self.fa_model = FactorAnalyzer(n_factors=n_factors, rotation='varimax')
         self.fa_model.fit(self.df_efa)
 
-        # Get the Loadings (The correlation between Variables and Factors)
         self.loadings = pd.DataFrame(
             self.fa_model.loadings_,
             index=self.df_efa.columns,
             columns=[f'Factor {i + 1}' for i in range(n_factors)]
         )
 
-        # Get Variance Explained
         variance = self.fa_model.get_factor_variance()
         var_df = pd.DataFrame(variance, index=['SS Loadings', 'Proportion Var', 'Cumulative Var'],
                               columns=[f'Factor {i + 1}' for i in range(n_factors)])
@@ -279,16 +265,12 @@ class FlightStatusPrediction:
         return self
 
     def visualize_efa(self):
-        """
-        Heatmap to see which variables belong to which hidden Factor.
-        """
         if self.loadings is None:
             print("Run build_efa() first.")
             return
 
         plt.figure(figsize=(8, 6))
 
-        # Heatmap of Factor Loadings
         sns.heatmap(self.loadings, annot=True, cmap="coolwarm", center=0)
 
         plt.title('Factor Loadings (Correlations between Variables and Latent Factors)')
@@ -297,7 +279,6 @@ class FlightStatusPrediction:
         plt.tight_layout()
         plt.show()
 
-        # Scree Plot (To help decide how many factors to use)
         plt.figure(figsize=(8, 4))
         ev, v = self.fa_model.get_eigenvalues()
         plt.scatter(range(1, self.df_efa.shape[1] + 1), ev)
@@ -306,7 +287,7 @@ class FlightStatusPrediction:
         plt.xlabel('Factors')
         plt.ylabel('Eigenvalue (Information)')
         plt.grid()
-        plt.axhline(y=1, color='r', linestyle='--')  # Kaiser criterion
+        plt.axhline(y=1, color='r', linestyle='--')
         plt.show()
 
 def do_pca():
