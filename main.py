@@ -1,6 +1,8 @@
 import argparse
 import pandas as pd
 import sys
+import os
+import joblib  # <--- NEW IMPORT
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 
@@ -8,28 +10,58 @@ from core import FlightStatusPrediction, FlightStatusLoadData
 
 
 class FlightDelayCLI:
-    def __init__(self, data_path="Zboruri_Sample_Proiect.csv"):
+    def __init__(self, data_path="Zboruri_Sample_Proiect.csv", model_file="flight_model.pkl"):
         self.data_path = data_path
-        self.model_wrapper = None
+        self.model_file = model_file
+
+        self.lda_model = None
         self.scaler = None
         self.feature_columns = None
 
+        self.model_wrapper = None
+
     def train(self):
-        print(f"Loading data from {self.data_path}")
+        if os.path.exists(self.model_file):
+            print(f"Found saved model: {self.model_file}")
+            print("Loading model, scaler, and features")
+
+            # Load the dictionary containing all artifacts
+            artifacts = joblib.load(self.model_file)
+
+            self.lda_model = artifacts['model']
+            self.scaler = artifacts['scaler']
+            self.feature_columns = artifacts['features']
+
+            print("Model loaded successfully.\n")
+            return
+        print(f"No saved model found. Loading data from {self.data_path}...")
 
         data_load = FlightStatusLoadData(data_path=self.data_path)
         print("Data loaded successfully.")
         print("Training model")
-        self.model_wrapper = FlightStatusPrediction(data_load)
 
+        self.model_wrapper = FlightStatusPrediction(data_load)
         self.model_wrapper.preprocess_for_lda()
         self.model_wrapper.build_lda()
 
+        # Extract the artifacts we need to save
+        self.lda_model = self.model_wrapper.lda_model
         self.feature_columns = self.model_wrapper.X_lda.columns
 
+        # Fit the scaler
         self.scaler = StandardScaler()
         self.scaler.fit(self.model_wrapper.X_lda)
-        print("Model trained successfully.\n")
+
+        # 3. SAVE THE MODEL
+        print(f"Saving model to {self.model_file}...")
+        artifacts = {
+            'model': self.lda_model,
+            'scaler': self.scaler,
+            'features': self.feature_columns
+        }
+        joblib.dump(artifacts, self.model_file)
+
+        print("Model trained and saved successfully.\n")
 
     def _prepare_input_vector(self, flight_date, airline, crs_dep, dep_time, delay_min):
         input_data = pd.DataFrame([{
@@ -52,14 +84,14 @@ class FlightDelayCLI:
         return self.scaler.transform(input_data)
 
     def predict_single(self, flight_date, airline, crs_dep, dep_time, delay_min):
-        if not self.model_wrapper:
-            raise Exception("Model not trained. Run train() first.")
+        if self.lda_model is None:
+            raise Exception("Model not trained or loaded. Run train() first.")
 
         input_scaled = self._prepare_input_vector(flight_date, airline, crs_dep, dep_time, delay_min)
 
-        prediction_class = self.model_wrapper.lda_model.predict(input_scaled)[0]
-        probabilities = self.model_wrapper.lda_model.predict_proba(input_scaled)[0]
-        classes = self.model_wrapper.lda_model.classes_
+        prediction_class = self.lda_model.predict(input_scaled)[0]
+        probabilities = self.lda_model.predict_proba(input_scaled)[0]
+        classes = self.lda_model.classes_
 
         return prediction_class, classes, probabilities
 
@@ -141,6 +173,9 @@ def main():
 
     parser.add_argument('--data', type=str, default="Zboruri_Sample_Proiect.csv", help="Path to the training CSV file")
 
+    # NEW ARGUMENT: Allow user to specify a different model file name if they want
+    parser.add_argument('--model', type=str, default="flight_model.pkl", help="Path to save/load the model file")
+
     subparsers = parser.add_subparsers(dest='command', required=True, help="Command to run")
 
     subparsers.add_parser('simulate', help="Run default comparison scenarios")
@@ -156,11 +191,12 @@ def main():
 
     args = parser.parse_args()
 
-    cli = FlightDelayCLI(data_path=args.data)
+    cli = FlightDelayCLI(data_path=args.data, model_file=args.model)
     try:
         cli.train()
     except FileNotFoundError:
-        print(f"Error: Data file '{args.data}' not found. Please check the path.")
+        # Only errors out if training is required AND CSV is missing
+        print(f"Error: Data file '{args.data}' not found and no saved model exists.")
         sys.exit(1)
 
     if args.command == 'simulate':
