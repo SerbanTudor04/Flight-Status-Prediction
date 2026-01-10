@@ -310,20 +310,20 @@ class FlightStatusPrediction:
         plt.show()
 
 def do_pca():
-    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
+    data_load_obj = FlightStatusLoadData(data_path="Zboruri_Sample_Proiect.csv")
     obj = FlightStatusPrediction(data_load_obj)
     obj.build_pca()\
         .visualize_pca_results()
 
 def do_lda():
-    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
+    data_load_obj = FlightStatusLoadData(data_path="Zboruri_Sample_Proiect.csv")
     obj = FlightStatusPrediction(data_load_obj)
     obj.build_lda()\
         .visualize_lda_results()
 
 
 def do_efa():
-    data_load_obj = FlightStatusLoadData(data_path="data/Combined_Flights_2019.csv")
+    data_load_obj = FlightStatusLoadData(data_path="Zboruri_Sample_Proiect.csv")
     data_load_obj.features=[
         'FlightDate', 'Airline', 'Origin', 'Dest',
         'Cancelled', 'Diverted',
