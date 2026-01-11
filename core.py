@@ -318,5 +318,5 @@ def do_efa():
 
 if __name__ == "__main__":
     # do_lda()
-    # do_pca()
-    do_efa()
+    do_pca()
+    # do_efa()

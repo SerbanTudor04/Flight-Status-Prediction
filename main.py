@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import sys
 import os
-import joblib  # <--- NEW IMPORT
+import joblib  # <NEW IMPORT
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 
@@ -116,26 +116,26 @@ class FlightDelayCLI:
         ]
 
         for sc in scenarios:
-            print(f"--- Scenario: {sc['Name']} ---")
+            print(f"{sc['Name']}")
             pred_class, classes, probs = self.predict_single(
                 sc["FlightDate"], sc["Airline"], sc["CRSDepTime"], sc["DepTime"], sc["DepDelayMinutes"]
             )
 
             print(f"Predicted Status: {pred_class}")
-            print("Probabilities:")
+            print("Probabilities (%):")
             for cls, prob in zip(classes, probs):
                 print(f"  - {cls}: {prob * 100:.2f}%")
             print("")
 
     def run_interactive_mode(self):
-        print("\n--- Interactive Flight Status Prediction ---")
+        print("\nInteractive Flight Status Prediction")
         print("Press Enter to accept the [default value].\n")
 
         default_date = datetime.today().strftime('%Y-%m-%d')
         date_input = input(f"Flight Date (YYYY-MM-DD) [{default_date}]: ").strip()
         flight_date = date_input if date_input else default_date
 
-        default_airline = "TAROM"
+        default_airline = "RO"
         airline_input = input(f"Airline Code [{default_airline}]: ").strip()
         airline = airline_input if airline_input else default_airline
 
@@ -206,7 +206,7 @@ def main():
         cli.run_interactive_mode()
 
     elif args.command == 'predict':
-        print(f"\n--- Custom Prediction for {args.airline} on {args.date} ---")
+        print(f"\nCustom Prediction for {args.airline} on {args.date}")
         pred_class, classes, probs = cli.predict_single(
             args.date, args.airline, args.crs, args.actual, args.delay
         )
