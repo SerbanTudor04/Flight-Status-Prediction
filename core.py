@@ -5,6 +5,8 @@ import pandas as pd
 from factor_analyzer import FactorAnalyzer, calculate_bartlett_sphericity, calculate_kmo
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -290,6 +292,40 @@ class FlightStatusPrediction:
         plt.axhline(y=1, color='r', linestyle='--')
         plt.show()
 
+    def evaluate_lda_performance(self, test_size=0.2):
+        """
+        Imparte datele in set de antrenament si testare, antreneaza un model temporar
+        si afiseaza raportul de clasificare pentru a valida acuratetea.
+        """
+        if self.X_lda is None:
+            self.preprocess_for_lda()
+
+        print(f"\n--- EVALUARE MODEL (Split {100 - test_size * 100:.0f}/{test_size * 100:.0f}) ---")
+
+        # 1. Split Date
+        X_train, X_test, y_train, y_test = train_test_split(
+            self.X_lda, self.y_lda, test_size=test_size, random_state=42, stratify=self.y_lda
+        )
+
+        # 2. Scalare (Fit pe train, transform pe test pentru a evita data leakage)
+        scaler_val = StandardScaler()
+        X_train_scaled = scaler_val.fit_transform(X_train)
+        X_test_scaled = scaler_val.transform(X_test)
+
+        # 3. Antrenare Model de Validare
+        lda_val = LinearDiscriminantAnalysis(n_components=2)
+        lda_val.fit(X_train_scaled, y_train)
+
+        # 4. Predictie
+        y_pred = lda_val.predict(X_test_scaled)
+
+        # 5. Metrici
+        acc = accuracy_score(y_test, y_pred)
+        print(f"Acuratete Globala pe setul de Test: {acc * 100:.2f}%")
+        print("\nRaport Detaliat de Clasificare:")
+        print(classification_report(y_test, y_pred))
+
+        return acc
 def do_pca():
     data_load_obj = FlightStatusLoadData(data_path="Zboruri_Sample_Proiect.csv")
     obj = FlightStatusPrediction(data_load_obj)

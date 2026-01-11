@@ -44,6 +44,9 @@ class FlightDelayCLI:
         self.model_wrapper.preprocess_for_lda()
         self.model_wrapper.build_lda()
 
+        print("Initializare proces de validare (Train/Test Split)...")
+        self.model_wrapper.evaluate_lda_performance(test_size=0.2)
+
         # Extract the artifacts we need to save
         self.lda_model = self.model_wrapper.lda_model
         self.feature_columns = self.model_wrapper.X_lda.columns
