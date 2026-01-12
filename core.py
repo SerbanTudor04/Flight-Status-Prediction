@@ -81,7 +81,7 @@ class FlightStatusPrediction:
 
         pca_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
 
-        print("\n--- PCA Result ---")
+        print("\nPCA Result")
         print(f"Explained Variance Ratio: {self.pca_model.explained_variance_ratio_}")
 
         components = pd.DataFrame(self.pca_model.components_, columns=self.dataframe_pca.columns, index=['PC1', 'PC2'])
@@ -176,7 +176,7 @@ class FlightStatusPrediction:
         self.lda_result = pd.DataFrame(data=X_lda_transformed, columns=['LD1', 'LD2'])
         self.lda_result['Class'] = self.y_lda.values
 
-        print("\n---  LDA Result ---")
+        print("\n LDA Result")
         print(f"Explained Variance Ratio: {self.lda_model.explained_variance_ratio_}")
         return self
 
@@ -207,7 +207,7 @@ class FlightStatusPrediction:
         return self
 
     def preprocess_for_efa(self):
-        print("\n--- Preprocessing for EFA ---")
+        print("\nPreprocessing for EFA")
         df = self.dataframe[self.features].copy()
 
         cols_to_drop = ['FlightDate', 'Airline', 'Origin', 'Dest']
@@ -233,7 +233,7 @@ class FlightStatusPrediction:
         if self.df_efa is None:
             self.preprocess_for_efa()
 
-        print("\n--- 1. Adequacy Tests ---")
+        print("\n1. Adequacy Tests")
 
         chi_square_value, p_value = calculate_bartlett_sphericity(self.df_efa)
         print(f"Bartlett’s Test p-value: {p_value} (Should be < 0.05)")
@@ -247,7 +247,7 @@ class FlightStatusPrediction:
         if self.df_efa is None:
             self.preprocess_for_efa()
 
-        print(f"\n--- 2. Building Factor Model ({n_factors} Factors) ---")
+        print(f"\n2. Building Factor Model ({n_factors} Factors)")
 
         self.fa_model = FactorAnalyzer(n_factors=n_factors, rotation='varimax')
         self.fa_model.fit(self.df_efa)
@@ -293,33 +293,24 @@ class FlightStatusPrediction:
         plt.show()
 
     def evaluate_lda_performance(self, test_size=0.2):
-        """
-        Imparte datele in set de antrenament si testare, antreneaza un model temporar
-        si afiseaza raportul de clasificare pentru a valida acuratetea.
-        """
         if self.X_lda is None:
             self.preprocess_for_lda()
 
-        print(f"\n--- EVALUARE MODEL (Split {100 - test_size * 100:.0f}/{test_size * 100:.0f}) ---")
+        print(f"\nEVALUARE MODEL (Split {100 - test_size * 100:.0f}/{test_size * 100:.0f})")
 
-        # 1. Split Date
         X_train, X_test, y_train, y_test = train_test_split(
             self.X_lda, self.y_lda, test_size=test_size, random_state=42, stratify=self.y_lda
         )
 
-        # 2. Scalare (Fit pe train, transform pe test pentru a evita data leakage)
         scaler_val = StandardScaler()
         X_train_scaled = scaler_val.fit_transform(X_train)
         X_test_scaled = scaler_val.transform(X_test)
 
-        # 3. Antrenare Model de Validare
         lda_val = LinearDiscriminantAnalysis(n_components=2)
         lda_val.fit(X_train_scaled, y_train)
 
-        # 4. Predictie
         y_pred = lda_val.predict(X_test_scaled)
 
-        # 5. Metrici
         acc = accuracy_score(y_test, y_pred)
         print(f"Acuratete Globala pe setul de Test: {acc * 100:.2f}%")
         print("\nRaport Detaliat de Clasificare:")
